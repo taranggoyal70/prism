@@ -85,9 +85,12 @@ export async function explainPullRequest(
 
   const context = await activeDependencies.fetchContext(ref);
   const draft = await activeDependencies.generateDiagram(context);
+  const referencedEvidenceIds = new Set(
+    draft.nodes.flatMap((node) => node.evidenceIds),
+  );
   const diagram: DiagramSpec = {
     ...draft,
-    evidence: context.evidence,
+    evidence: context.evidence.filter((item) => referencedEvidenceIds.has(item.id)),
     memories: context.memories,
   };
   validateGrounding(diagram);

@@ -17,7 +17,7 @@ import { FormEvent, useState } from "react";
 import { EvidenceDiagram } from "@/components/evidence-diagram";
 import type { ExplanationResult } from "@/lib/schema";
 
-const EXAMPLE_URL = "https://github.com/vercel/ai/pull/19315";
+const EXAMPLE_URL = "https://github.com/taranggoyal70/prism/pull/1";
 
 export function PrismWorkspace() {
   const [prUrl, setPrUrl] = useState(EXAMPLE_URL);

@@ -43,6 +43,13 @@ describe("PR explanation pipeline", () => {
             url: "https://github.com/openai/prism/blob/2222222/src/webhooks.ts",
             description: "Changed in this pull request: +18 / -3 lines.",
           },
+          {
+            id: "github_file_2",
+            source: "github" as const,
+            filePath: "docs/notes.md",
+            url: "https://github.com/openai/prism/blob/2222222/docs/notes.md",
+            description: "Unreferenced supporting documentation.",
+          },
         ],
         modelContext: "src/webhooks.ts\n+ reject replayed events",
         memories: [],
@@ -67,6 +74,7 @@ describe("PR explanation pipeline", () => {
 
     expect(result.source).toBe("live");
     expect(result.diagram.nodes[0]?.evidenceIds).toEqual(["github_file_1"]);
+    expect(result.diagram.evidence).toHaveLength(1);
     expect(result.diagram.evidence[0]?.url).toContain(result.pullRequest.headSha);
   });
 
