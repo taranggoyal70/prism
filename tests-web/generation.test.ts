@@ -3,7 +3,7 @@ import { describe, expect, it } from "vitest";
 import { generateEvidenceDiagram } from "@/lib/generation/diagram";
 
 describe("diagram generation", () => {
-  it("builds a useful grounded plan without a paid model dependency", async () => {
+  it("builds a semantic grounded plan without sequencing filenames", async () => {
     const diagram = await generateEvidenceDiagram({
       pullRequest: {
         ref: { owner: "openai", repository: "prism", number: 7 },
@@ -34,15 +34,75 @@ describe("diagram generation", () => {
           description: "Replay protection should be checked before dispatch.",
         },
       ],
-      modelContext: "FILE github_file_1: src/webhooks.ts\n+validate event before dispatch",
+      modelContext: [
+        "FILE github_file_1: src/webhooks.ts",
+        "@@ -1,3 +1,24 @@",
+        "+export async function validateWebhook(event: WebhookEvent) {",
+        "+  if (await wasAlreadyDelivered(event.id)) return rejectReplay(event)",
+        "+  return dispatchWebhook(event)",
+        "+}",
+        "",
+        "FILE github_file_2: src/worker.ts",
+        "@@ -1,2 +1,10 @@",
+        "+export async function dispatchWebhook(event: WebhookEvent) {",
+        "+  return queue.send(event)",
+        "+}",
+      ].join("\n"),
       memories: [],
     });
 
     expect(diagram.title).toContain("Validate webhook delivery");
-    expect(diagram.nodes).toHaveLength(3);
+    expect(diagram.nodes.length).toBeGreaterThanOrEqual(3);
     expect(diagram.nodes.every((node) => node.evidenceIds.length > 0)).toBe(true);
+    expect(diagram.nodes.some((node) => node.kind === "decision")).toBe(true);
+    expect(diagram.nodes.map((node) => node.label).join(" ")).not.toMatch(/webhooks\.ts|worker\.ts/);
+    expect(diagram.edges.some((edge) => /yes|no|valid|replay/i.test(edge.label))).toBe(true);
     expect(diagram.summary).toContain("3 files");
     expect(diagram.summary).toContain("Greptile");
+  });
+
+  it("ranks behavior-bearing code ahead of documentation and styles", async () => {
+    const diagram = await generateEvidenceDiagram({
+      pullRequest: {
+        ref: { owner: "acme", repository: "app", number: 11 },
+        title: "Validate API requests before generation",
+        description: "Invalid requests return guidance. Valid requests generate a grounded result.",
+        baseSha: "1111111",
+        headSha: "2222222",
+        url: "https://github.com/acme/app/pull/11",
+        changedFiles: ["README.md", "app/globals.css", "app/api/explain/route.ts", "lib/generation/diagram.ts"],
+      },
+      evidence: [
+        { id: "docs", source: "github", filePath: "README.md", description: "Documentation" },
+        { id: "styles", source: "github", filePath: "app/globals.css", description: "Styles" },
+        { id: "route", source: "github", filePath: "app/api/explain/route.ts", description: "Request handler" },
+        { id: "generator", source: "github", filePath: "lib/generation/diagram.ts", description: "Diagram generator" },
+      ],
+      modelContext: [
+        "FILE docs: README.md",
+        "+# Product notes",
+        "",
+        "FILE styles: app/globals.css",
+        "+.panel { color: blue; }",
+        "",
+        "FILE route: app/api/explain/route.ts",
+        "+const parsed = requestSchema.safeParse(payload)",
+        "+if (!parsed.success) return invalidRequest()",
+        "+return explainPullRequest(parsed.data.prUrl)",
+        "",
+        "FILE generator: lib/generation/diagram.ts",
+        "+export function generateEvidenceDiagram(context: Context) {",
+        "+  return buildBehaviorGraph(context)",
+        "+}",
+      ].join("\n"),
+      memories: [],
+    });
+
+    const evidenceIds = new Set(diagram.nodes.flatMap((node) => node.evidenceIds));
+    expect(evidenceIds).toContain("route");
+    expect(evidenceIds).toContain("generator");
+    expect(evidenceIds).not.toContain("docs");
+    expect(evidenceIds).not.toContain("styles");
   });
 
   it("uses a sequence diagram when the changed files span system boundaries", async () => {

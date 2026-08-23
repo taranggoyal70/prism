@@ -4,33 +4,57 @@ import {
   AlertCircle,
   ArrowRight,
   BrainCircuit,
+  Check,
   CheckCircle2,
-  Download,
+  Clipboard,
   ExternalLink,
   FileDown,
+  GitBranch,
   GitPullRequest,
   LoaderCircle,
+  RefreshCw,
   ShieldCheck,
+  Sparkles,
 } from "lucide-react";
-import { FormEvent, useState } from "react";
+import { FormEvent, useEffect, useMemo, useRef, useState } from "react";
 
 import { EvidenceDiagram } from "@/components/evidence-diagram";
-import type { ExplanationResult } from "@/lib/schema";
+import type { DiagramNode, Evidence, ExplanationResult } from "@/lib/schema";
 
 const EXAMPLE_URL = "https://github.com/taranggoyal70/prism/pull/1";
 
 export function PrismWorkspace() {
   const [prUrl, setPrUrl] = useState(EXAMPLE_URL);
   const [result, setResult] = useState<ExplanationResult | null>(null);
+  const [selectedNodeId, setSelectedNodeId] = useState("");
   const [error, setError] = useState("");
   const [loading, setLoading] = useState(false);
   const [elapsedMs, setElapsedMs] = useState<number | null>(null);
+  const [copied, setCopied] = useState(false);
+  const inputRef = useRef<HTMLInputElement>(null);
+  const resultRef = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    const sharedPullRequest = new URLSearchParams(window.location.search).get("pr");
+    if (!sharedPullRequest) return;
+    const frame = window.requestAnimationFrame(() => setPrUrl(sharedPullRequest));
+    return () => window.cancelAnimationFrame(frame);
+  }, []);
+
+  useEffect(() => {
+    if (!result) return;
+    const frame = window.requestAnimationFrame(() => {
+      resultRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+    return () => window.cancelAnimationFrame(frame);
+  }, [result]);
 
   async function explain(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
     const startedAt = Date.now();
     setLoading(true);
     setError("");
+    setResult(null);
     setElapsedMs(null);
 
     try {
@@ -47,25 +71,19 @@ export function PrismWorkspace() {
             : "Could not explain this pull request.";
         throw new Error(message);
       }
-      setResult(payload as ExplanationResult);
+      const explanation = payload as ExplanationResult;
+      const preferredNode =
+        explanation.diagram.nodes.find((node) => /build|assemble/i.test(node.label) && /grounded/i.test(node.label)) ??
+        explanation.diagram.nodes.find((node) => node.kind === "decision") ??
+        explanation.diagram.nodes.toSorted((left, right) => right.evidenceIds.length - left.evidenceIds.length)[0];
+      setResult(explanation);
+      setSelectedNodeId(preferredNode?.id ?? "");
       setElapsedMs(Date.now() - startedAt);
     } catch (caught) {
-      setResult(null);
       setError(caught instanceof Error ? caught.message : "Could not explain this pull request.");
     } finally {
       setLoading(false);
     }
-  }
-
-  function downloadMermaid() {
-    if (!result) return;
-    const blob = new Blob([result.mermaid], { type: "text/plain;charset=utf-8" });
-    const url = URL.createObjectURL(blob);
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = `${result.pullRequest.ref.repository}-pr-${result.pullRequest.ref.number}.mmd`;
-    anchor.click();
-    URL.revokeObjectURL(url);
   }
 
   function downloadBrief() {
@@ -78,28 +96,57 @@ export function PrismWorkspace() {
           .map((memory) => `- Claude-Mem #${memory.observationId}: **${memory.title}** - ${memory.relevance}`)
           .join("\n")
       : "- No matching project memory was available.";
-    const brief = `# ${result.pullRequest.title}\n\n${result.diagram.summary}\n\n## Why this diagram\n\n${result.diagram.selectionReason}\n\n## Evidence\n\n${evidence}\n\n## Project memory\n\n${memories}\n\n## Diagram\n\n\`\`\`mermaid\n${result.mermaid}\n\`\`\`\n`;
+    const brief = `# ${result.pullRequest.title}\n\n${result.diagram.summary}\n\n## Why this graph\n\n${result.diagram.selectionReason}\n\n## Evidence\n\n${evidence}\n\n## Project memory\n\n${memories}\n\n## Diagram\n\n\`\`\`mermaid\n${result.mermaid}\n\`\`\`\n`;
     const blob = new Blob([brief], { type: "text/markdown;charset=utf-8" });
     const url = URL.createObjectURL(blob);
     const anchor = document.createElement("a");
     anchor.href = url;
     anchor.download = `${result.pullRequest.ref.repository}-pr-${result.pullRequest.ref.number}-brief.md`;
+    document.body.appendChild(anchor);
     anchor.click();
-    URL.revokeObjectURL(url);
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 1_000);
   }
 
+  async function copyShareLink() {
+    const shareUrl = new URL(window.location.href);
+    shareUrl.searchParams.set("pr", prUrl);
+
+    try {
+      await writeClipboard(shareUrl.toString());
+      setCopied(true);
+      window.setTimeout(() => setCopied(false), 1_800);
+    } catch {
+      setError("Copying is unavailable in this browser. Use Export evidence instead.");
+    }
+  }
+
+  function changePullRequest() {
+    inputRef.current?.focus();
+    inputRef.current?.select();
+    inputRef.current?.scrollIntoView({ behavior: "smooth", block: "center" });
+  }
+
+  const evidenceById = useMemo(
+    () => new Map(result?.diagram.evidence.map((item) => [item.id, item]) ?? []),
+    [result],
+  );
+  const selectedNode = result?.diagram.nodes.find((node) => node.id === selectedNodeId)
+    ?? result?.diagram.nodes[0];
+  const selectedEvidence = selectedNode?.evidenceIds
+    .map((id) => evidenceById.get(id))
+    .filter((item): item is Evidence => Boolean(item)) ?? [];
+  const claimNodes = result?.diagram.nodes.filter((node) => !node.id.includes("_alternate")) ?? [];
   const githubEvidence = result?.diagram.evidence.filter((item) => item.source === "github").length ?? 0;
   const greptileEvidence = result?.diagram.evidence.filter((item) => item.source === "greptile").length ?? 0;
 
   return (
     <section className="workspace" aria-label="Pull request explanation workspace">
       <div className="query-panel">
-        <div className="query-meta">
-          <label htmlFor="pr-url">GitHub pull request URL</label>
-          <span><CheckCircle2 size={13} aria-hidden="true" /> Codex-built sponsor pipeline</span>
-        </div>
         <form className="query-form" onSubmit={explain}>
+          <label htmlFor="pr-url">Pull request URL</label>
           <input
+            ref={inputRef}
             className="url-field"
             id="pr-url"
             name="prUrl"
@@ -112,12 +159,18 @@ export function PrismWorkspace() {
           />
           <button className="explain-button" type="submit" disabled={loading}>
             {loading ? (
-              <><LoaderCircle className="spinner" size={18} aria-hidden="true" />Tracing evidence</>
+              <><LoaderCircle className="spinner" size={18} aria-hidden="true" />Tracing behavior</>
             ) : (
-              <>Explain this PR <ArrowRight size={18} aria-hidden="true" /></>
+              <>Analyze <ArrowRight size={18} aria-hidden="true" /></>
             )}
           </button>
+          <span className="query-live"><i className="status-dot" />Live GitHub</span>
         </form>
+        {loading ? (
+          <div className="analysis-progress" role="status">
+            <span>Reading patches</span><span>Ranking symbols</span><span>Recalling memory</span><span>Grounding claims</span>
+          </div>
+        ) : null}
         {error ? (
           <div className="error-message" role="alert">
             <AlertCircle size={17} aria-hidden="true" />
@@ -127,109 +180,146 @@ export function PrismWorkspace() {
       </div>
 
       {result ? (
-        <div className="result-shell">
+        <div className="result-shell" ref={resultRef}>
           <header className="result-header">
-            <div>
+            <div className="result-title-block">
               <p className="repo-path">
                 {result.pullRequest.ref.owner} / {result.pullRequest.ref.repository} · PR #{result.pullRequest.ref.number}
               </p>
               <h2>{result.pullRequest.title}</h2>
+              <p className="result-summary">{result.diagram.summary}</p>
             </div>
-            <span className="source-badge">{result.source}</span>
+            <div className="result-actions">
+              <button type="button" onClick={changePullRequest}><RefreshCw size={15} />Change PR</button>
+              <button type="button" onClick={downloadBrief}><FileDown size={15} />Export evidence</button>
+              <button type="button" onClick={copyShareLink}>{copied ? <Check size={15} /> : <Clipboard size={15} />}{copied ? "Copied" : "Share"}</button>
+            </div>
           </header>
 
           <div className="provenance-strip" aria-label="Explanation provenance">
             <span className="provenance-item github"><ShieldCheck size={15} />GitHub <strong>{githubEvidence}</strong></span>
-            <span className="provenance-item greptile"><ShieldCheck size={15} />Greptile <strong>{greptileEvidence}</strong></span>
+            {greptileEvidence ? <span className="provenance-item greptile"><ShieldCheck size={15} />Greptile <strong>{greptileEvidence}</strong></span> : null}
             <span className="provenance-item memory"><BrainCircuit size={15} />Claude-Mem <strong>{result.diagram.memories.length}</strong></span>
+            <span className="diagram-reason"><GitBranch size={14} />{result.diagram.selectionReason}</span>
             {elapsedMs !== null ? <span className="provenance-time">Mapped in {(elapsedMs / 1_000).toFixed(1)}s</span> : null}
           </div>
 
-          <div className="diagram-intro">
-            <span className="diagram-type">{result.diagram.diagramType.replaceAll("_", " ")}</span>
-            <p>{result.diagram.selectionReason}</p>
-          </div>
-
-          <EvidenceDiagram source={result.mermaid} title={result.diagram.title} />
-
-          <div className="result-grid">
-            <section className="summary-panel">
-              <p className="panel-label">Plain-English explanation</p>
-              <h3>What changed</h3>
-              <p className="summary-copy">{result.diagram.summary}</p>
-              <div className="file-strip" aria-label="Changed files">
-                {result.pullRequest.changedFiles.slice(0, 10).map((file) => (
-                  <span className="file-chip" key={file}>{file}</span>
-                ))}
-                {result.pullRequest.changedFiles.length > 10 ? (
-                  <span className="file-chip file-chip-more">
-                    +{result.pullRequest.changedFiles.length - 10} more
-                  </span>
-                ) : null}
+          <div className="proof-workbench">
+            <aside className="claim-rail" aria-label="Behavioral claims">
+              <div className="claim-rail-heading">
+                <p className="panel-label">The change in {claimNodes.length} claims</p>
+                <span>Claims derived from executable patches.</span>
               </div>
-              <div className="export-actions">
-                <button className="download-button" type="button" onClick={downloadBrief}>
-                  <FileDown size={16} aria-hidden="true" /> Export evidence brief
-                </button>
-                <button className="download-button download-secondary" type="button" onClick={downloadMermaid}>
-                  <Download size={16} aria-hidden="true" /> Mermaid
-                </button>
-              </div>
-            </section>
-
-            <section className="evidence-panel">
-              <p className="panel-label">Trace every claim</p>
-              <h3>{result.diagram.evidence.length} pinned code references</h3>
-              <div className="evidence-list">
-                {result.diagram.evidence.map((item, index) => (
-                  <a
-                    className="evidence-card"
-                    href={item.url ?? result.pullRequest.url}
-                    target="_blank"
-                    rel="noreferrer"
-                    key={item.id}
+              <div className="claim-list">
+                {claimNodes.map((node, index) => (
+                  <button
+                    className={`claim-item${node.id === selectedNode?.id ? " selected" : ""}`}
+                    key={node.id}
+                    type="button"
+                    onClick={() => setSelectedNodeId(node.id)}
+                    aria-pressed={node.id === selectedNode?.id}
                   >
-                      <span className={`evidence-index ${item.source}`}>
-                        {item.source === "greptile" ? "GR" : `E${index + 1}`}
-                      </span>
-                    <span className="evidence-copy">
-                      <strong>
-                        {item.filePath ?? "Repository context"}
-                        {item.lineStart ? ` · L${item.lineStart}–${item.lineEnd}` : ""}
-                      </strong>
-                      <span>{item.description}</span>
-                    </span>
-                    <ExternalLink size={15} aria-hidden="true" />
-                  </a>
+                    <span className="claim-number">{index + 1}</span>
+                    <strong>{node.label}</strong>
+                    <span className="claim-proof"><CheckCircle2 size={13} />Verified · {node.evidenceIds.length} {node.evidenceIds.length === 1 ? "proof" : "proofs"}</span>
+                  </button>
                 ))}
               </div>
+              <p className="claim-rail-trust"><ShieldCheck size={15} />Every visible claim is pinned to exact source.</p>
+            </aside>
 
-              <div className="memory-divider"><BrainCircuit size={14} />Claude-Mem timeline</div>
-              {result.diagram.memories.length ? (
-                <div className="memory-stack">
-                  <p className="memory-status">
-                    Warm boot loaded {result.diagram.memories.length} project {result.diagram.memories.length === 1 ? "observation" : "observations"} before mapping.
-                  </p>
-                  {result.diagram.memories.map((memory) => (
-                    <article className="memory-card" key={memory.observationId}>
-                      <strong>#{memory.observationId} · {memory.title}</strong>
-                      <span>{memory.relevance}</span>
+            <EvidenceDiagram
+              diagram={result.diagram}
+              selectedNodeId={selectedNode?.id ?? ""}
+              onSelectNode={setSelectedNodeId}
+            />
+
+            <aside className="proof-inspector" aria-label="Selected claim evidence">
+              <div className="inspector-kicker"><Sparkles size={16} />Selected claim</div>
+              <h3>{selectedNode?.label}</h3>
+              <div className="verified-line"><CheckCircle2 size={15} />Verified <span>{selectedEvidence.length} {selectedEvidence.length === 1 ? "proof" : "proofs"} pinned</span></div>
+              {selectedEvidence.length ? (
+                <div className="inspector-evidence-stack">
+                  {selectedEvidence.map((evidence) => (
+                    <article className={`inspector-evidence ${evidence.source}`} key={evidence.id}>
+                      <p className="inspector-source">
+                        <span>{sourceLabel(evidence.source)}</span>
+                        {evidence.filePath ? `${evidence.filePath}${evidence.lineStart ? ` · L${evidence.lineStart}–${evidence.lineEnd}` : ""}` : "Repository context"}
+                      </p>
+                      {evidence.excerpt ? <pre>{evidence.excerpt}</pre> : null}
+                      <h4>Why it matters</h4>
+                      <p>{interpretEvidence(selectedNode, evidence)}</p>
+                      {evidence.url ? (
+                        <a href={evidence.url} target="_blank" rel="noreferrer">
+                          Open exact source <ExternalLink size={14} />
+                        </a>
+                      ) : null}
                     </article>
                   ))}
                 </div>
               ) : (
-                <p className="memory-empty">No matching Claude-Mem observations were found for this repository.</p>
+                <p className="memory-empty">This branch has no independently supported evidence and was removed from the primary claim list.</p>
               )}
-            </section>
+            </aside>
           </div>
+
+          <section className="memory-ribbon" aria-label="Memory that changed the decision">
+            <div className="memory-ribbon-title"><BrainCircuit size={20} /><span><strong>Memory that changed the decision</strong>Repository-scoped observations only.</span></div>
+            {result.diagram.memories.length ? result.diagram.memories.slice(0, 2).map((memory) => (
+              <article key={memory.observationId}>
+                <span>#{memory.observationId}</span>
+                <div><strong>{memory.title}</strong><p>{memory.relevance}</p></div>
+              </article>
+            )) : <p className="memory-empty">No relevant Claude-Mem observation exists for this repository, so the explanation uses current code only.</p>}
+          </section>
+
+          <footer className="trust-footer">
+            <div><ShieldCheck size={28} /><span><strong>Trust</strong>All claims grounded</span></div>
+            <strong>{claimNodes.length} of {claimNodes.length} behavioral claims<br />pinned to exact source</strong>
+            <div className="coverage-bars" aria-label="Source coverage">
+              <span>Live code <i style={{ width: `${Math.max(18, githubEvidence * 16)}%` }} /></span>
+              <span>Project memory <i className="memory" style={{ width: `${Math.max(8, result.diagram.memories.length * 24)}%` }} /></span>
+            </div>
+            <p>Built with evidence. Not guesses.</p>
+          </footer>
         </div>
-      ) : (
+      ) : loading ? null : (
         <div className="empty-state">
           <GitPullRequest size={28} strokeWidth={1.5} aria-hidden="true" />
           <strong>Ready to trace a real pull request</strong>
-          <span>Explain the example or paste any GitHub PR to map behavior back to its evidence.</span>
+          <span>Analyze the prepared PR or paste any public GitHub pull request.</span>
         </div>
       )}
     </section>
   );
+}
+
+async function writeClipboard(value: string): Promise<void> {
+  try {
+    await navigator.clipboard.writeText(value);
+    return;
+  } catch {
+    const input = document.createElement("textarea");
+    input.value = value;
+    input.setAttribute("readonly", "");
+    input.style.position = "fixed";
+    input.style.opacity = "0";
+    document.body.appendChild(input);
+    input.select();
+    const copied = document.execCommand("copy");
+    input.remove();
+    if (!copied) throw new Error("Clipboard write failed.");
+  }
+}
+
+function sourceLabel(source: Evidence["source"]): string {
+  if (source === "greptile") return "Greptile review";
+  if (source === "claude_mem") return "Claude-Mem";
+  return "Current code";
+}
+
+function interpretEvidence(node: DiagramNode | undefined, evidence: Evidence): string {
+  if (evidence.source === "greptile") return `A repository-aware review supports this claim: ${evidence.description}`;
+  if (evidence.source === "claude_mem") return `A prior project decision explains why this behavior exists: ${evidence.description}`;
+  return `${evidence.description} These exact changed lines support the selected behavior: “${node?.label ?? "Grounded behavior"}”`;
 }

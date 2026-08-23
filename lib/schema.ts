@@ -14,6 +14,7 @@ const evidenceSchema = z.object({
   line_end: z.number().int().positive().nullable().optional(),
   url: z.url().nullable().optional(),
   description: z.string().min(1),
+  excerpt: z.string().nullable().optional(),
 });
 
 const memorySchema = z.object({
@@ -113,6 +114,7 @@ export type Evidence = {
   lineEnd?: number | null;
   url?: string | null;
   description: string;
+  excerpt?: string | null;
 };
 
 export type Memory = {

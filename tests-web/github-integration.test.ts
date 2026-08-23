@@ -61,6 +61,8 @@ describe("GitHub integration", () => {
           source: "github",
           filePath: "src/webhooks.ts",
           url: expect.stringContaining("/blob/2222222222222222222222222222222222222222/"),
+          description: expect.stringContaining("validateWebhook"),
+          excerpt: expect.stringContaining("export function validateWebhook"),
         }),
         expect.objectContaining({
           source: "greptile",

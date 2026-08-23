@@ -93,7 +93,8 @@ export async function fetchGitHubPullRequest(
       lineStart: range?.start,
       lineEnd: range?.end,
       url: pinnedBlobUrl(ref, pull.head.sha, file.filename, range),
-      description: `Changed in this pull request: +${file.additions} / -${file.deletions} lines.`,
+      description: describeFileChange(file),
+      excerpt: patchExcerpt(file.patch),
     } satisfies Evidence;
   });
 
@@ -158,6 +159,33 @@ function parseNewLineRange(patch?: string): { start: number; end: number } | und
   const start = Number(match[1]);
   const count = Number(match[2] ?? 1);
   return { start, end: Math.max(start, start + count - 1) };
+}
+
+function describeFileChange(file: z.infer<typeof changedFileSchema>): string {
+  const excerpt = patchExcerpt(file.patch);
+  const symbols = excerpt
+    ?.matchAll(/\b(?:function|class|interface|type|const)\s+([a-zA-Z_$][\w$]*)/g)
+    .toArray()
+    .map((match) => match[1])
+    .filter((symbol): symbol is string => Boolean(symbol)) ?? [];
+  const uniqueSymbols = [...new Set(symbols)].slice(0, 3);
+  const branchNote = /\bif\s*\(|\bswitch\s*\(|\.safeParse\(/.test(excerpt ?? "")
+    ? " Adds or changes executable decision logic."
+    : "";
+  const symbolNote = uniqueSymbols.length
+    ? ` Changes ${uniqueSymbols.join(", ")}.`
+    : "";
+  return `${file.additions + file.deletions} changed lines in this pull request.${symbolNote}${branchNote}`;
+}
+
+function patchExcerpt(patch?: string): string | undefined {
+  const lines = patch
+    ?.split("\n")
+    .filter((line) => line.startsWith("+") && !line.startsWith("+++"))
+    .map((line) => line.slice(1).trimEnd())
+    .filter(Boolean)
+    .slice(0, 8);
+  return lines?.length ? lines.join("\n") : undefined;
 }
 
 function pinnedBlobUrl(

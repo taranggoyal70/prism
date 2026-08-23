@@ -10,7 +10,7 @@ import { PrismWorkspace } from "@/components/prism-workspace";
 import { explainPullRequest } from "@/lib/prism";
 
 vi.mock("@/components/evidence-diagram", () => ({
-  EvidenceDiagram: ({ title }: { title: string }) => <div aria-label={`${title} diagram`} />,
+  EvidenceDiagram: ({ diagram }: { diagram: { title: string } }) => <div aria-label={`${diagram.title} behavior graph`} />,
 }));
 
 afterEach(() => {
@@ -33,11 +33,12 @@ describe("PRism workspace", () => {
     const user = userEvent.setup();
     render(<PrismWorkspace />);
 
-    await user.click(screen.getByRole("button", { name: "Explain this PR" }));
+    await user.click(screen.getByRole("button", { name: "Analyze" }));
 
     expect(await screen.findByRole("heading", { name: result.pullRequest.title })).toBeVisible();
-    expect(screen.getByText("3 pinned code references")).toBeVisible();
-    expect(screen.getByText(/Claude-Mem timeline/)).toBeVisible();
-    expect(screen.getByText(/Warm boot loaded 1 project observation/)).toBeVisible();
+    expect(screen.getByLabelText("Behavioral claims")).toBeVisible();
+    expect(screen.getByLabelText(`${result.diagram.title} behavior graph`)).toBeVisible();
+    expect(screen.getByText("Memory that changed the decision")).toBeVisible();
+    expect(screen.getByText("Repository-scoped observations only.")).toBeVisible();
   });
 });

@@ -4,6 +4,7 @@ import { fetchClaudeMemories } from "@/lib/integrations/claude-mem";
 
 afterEach(() => {
   vi.unstubAllGlobals();
+  vi.unstubAllEnvs();
 });
 
 describe("Claude-Mem integration", () => {
@@ -52,5 +53,18 @@ describe("Claude-Mem integration", () => {
 
   it("degrades safely when no Claude-Mem bridge is configured", async () => {
     await expect(fetchClaudeMemories("prism", { baseUrl: "" })).resolves.toEqual([]);
+  });
+
+  it("never leaks an environment project override into another repository", async () => {
+    vi.stubEnv("PRISM_CLAUDE_MEM_PROJECT", "prism");
+    vi.stubGlobal("fetch", vi.fn().mockResolvedValue(Response.json({ items: [] })));
+
+    await fetchClaudeMemories("another-repository", {
+      baseUrl: "http://127.0.0.1:37702",
+    });
+
+    const requestedUrl = vi.mocked(fetch).mock.calls[0]?.[0];
+    expect(requestedUrl).toBeInstanceOf(URL);
+    expect((requestedUrl as URL).searchParams.get("project")).toBe("another-repository");
   });
 });

@@ -30,7 +30,11 @@ export async function fetchClaudeMemories(
 
   try {
     const url = new URL("/api/observations", baseUrl);
-    url.searchParams.set("project", process.env.PRISM_CLAUDE_MEM_PROJECT ?? project);
+    const configuredProject = process.env.PRISM_CLAUDE_MEM_PROJECT;
+    const scopedProject = configuredProject?.toLowerCase() === project.toLowerCase()
+      ? configuredProject
+      : project;
+    url.searchParams.set("project", scopedProject);
     url.searchParams.set("limit", "4");
     url.searchParams.set("offset", "0");
     const token = options.token ?? process.env.CLAUDE_MEM_BRIDGE_TOKEN;

@@ -150,6 +150,7 @@ function normalizeDiagram(fixture: Fixture): DiagramSpec {
       lineEnd: item.line_end,
       url: item.url,
       description: item.description,
+      excerpt: item.excerpt,
     })),
     memories: diagram.memories.map((memory) => ({
       observationId: memory.observation_id,
