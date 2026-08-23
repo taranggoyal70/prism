@@ -50,7 +50,7 @@ describe("diagram generation", () => {
       pullRequest: {
         ref: { owner: "acme", repository: "app", number: 9 },
         title: "Route API jobs to worker",
-        description: "The API queues jobs for the worker.",
+        description: "The API queues jobs for the worker and supports flowcharts or state machines.",
         baseSha: "1111111",
         headSha: "2222222",
         url: "https://github.com/acme/app/pull/9",

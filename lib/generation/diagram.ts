@@ -9,7 +9,7 @@ type GenerationContext = {
 
 export type DiagramDraft = Omit<DiagramSpec, "evidence" | "memories">;
 
-const STATE_TERMS = /\b(state|status|lifecycle|transition|queued|pending|complete|failed)\b/i;
+const STATE_TERMS = /\b(status|lifecycle|transition|queued|pending|completed?|failed|state transition)\b/i;
 const SYSTEM_TERMS = /\b(api|route|worker|queue|job|service|webhook|server|client)\b/i;
 
 export async function generateEvidenceDiagram(
@@ -105,7 +105,13 @@ function selectionReason(diagramType: DiagramDraft["diagramType"]): string {
 }
 
 function summarizeIntent(pullRequest: PullRequest): string {
-  const description = pullRequest.description.trim().replace(/\s+/g, " ");
+  const description = pullRequest.description
+    .replace(/^#{1,6}\s+/gm, "")
+    .replace(/^[-*+]\s+/gm, "")
+    .replace(/\[([^\]]+)]\([^)]+\)/g, "$1")
+    .replace(/`([^`]+)`/g, "$1")
+    .trim()
+    .replace(/\s+/g, " ");
   if (!description) return `The pull request implements “${pullRequest.title}”.`;
   return truncate(description, 320);
 }

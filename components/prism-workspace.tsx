@@ -158,9 +158,14 @@ export function PrismWorkspace() {
               <h3>What changed</h3>
               <p className="summary-copy">{result.diagram.summary}</p>
               <div className="file-strip" aria-label="Changed files">
-                {result.pullRequest.changedFiles.map((file) => (
+                {result.pullRequest.changedFiles.slice(0, 10).map((file) => (
                   <span className="file-chip" key={file}>{file}</span>
                 ))}
+                {result.pullRequest.changedFiles.length > 10 ? (
+                  <span className="file-chip file-chip-more">
+                    +{result.pullRequest.changedFiles.length - 10} more
+                  </span>
+                ) : null}
               </div>
               <div className="export-actions">
                 <button className="download-button" type="button" onClick={downloadBrief}>
