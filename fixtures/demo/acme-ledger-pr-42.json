@@ -1,0 +1,37 @@
+{
+  "pull_request": {
+    "ref": {"owner": "acme", "repository": "ledger", "number": 42},
+    "title": "Prevent duplicate ledger entries",
+    "description": "Adds an idempotency check before committing a ledger entry.",
+    "base_sha": "17211b0000000000000000000000000000000000",
+    "head_sha": "234be30000000000000000000000000000000000",
+    "url": "https://github.com/acme/ledger/pull/42",
+    "changed_files": ["src/ledger/commands.py", "src/ledger/store.py", "tests/test_ledger.py"]
+  },
+  "diagram": {
+    "diagram_type": "flowchart",
+    "title": "Idempotent ledger write",
+    "selection_reason": "The change is primarily a validation branch with an early return.",
+    "summary": "Before writing a ledger entry, the command checks its idempotency key. Existing entries are returned unchanged; new entries are validated and committed once.",
+    "participants": [],
+    "nodes": [
+      {"id": "receive", "label": "Receive ledger command", "kind": "start", "evidence_ids": ["evidence_1"]},
+      {"id": "lookup", "label": "Find idempotency key", "kind": "decision", "evidence_ids": ["evidence_2"]},
+      {"id": "existing", "label": "Return existing entry", "kind": "end", "evidence_ids": ["evidence_2"]},
+      {"id": "commit", "label": "Validate and commit once", "kind": "process", "evidence_ids": ["evidence_3"]}
+    ],
+    "edges": [
+      {"source": "receive", "target": "lookup", "label": "command accepted"},
+      {"source": "lookup", "target": "existing", "label": "key exists"},
+      {"source": "lookup", "target": "commit", "label": "new key"}
+    ],
+    "evidence": [
+      {"id": "evidence_1", "source": "github", "file_path": "src/ledger/commands.py", "line_start": 18, "line_end": 27, "url": "https://github.com/acme/ledger/blob/234be30000000000000000000000000000000000/src/ledger/commands.py#L18-L27", "description": "Accepts and normalizes the ledger command."},
+      {"id": "evidence_2", "source": "github", "file_path": "src/ledger/store.py", "line_start": 44, "line_end": 56, "url": "https://github.com/acme/ledger/blob/234be30000000000000000000000000000000000/src/ledger/store.py#L44-L56", "description": "Looks up an existing entry by its idempotency key."},
+      {"id": "evidence_3", "source": "github", "file_path": "src/ledger/commands.py", "line_start": 31, "line_end": 48, "url": "https://github.com/acme/ledger/blob/234be30000000000000000000000000000000000/src/ledger/commands.py#L31-L48", "description": "Validates and commits a new entry."}
+    ],
+    "memories": [
+      {"observation_id": "mem-104", "title": "Retries must not duplicate financial events", "relevance": "Records the earlier decision to use caller-provided idempotency keys at write boundaries."}
+    ]
+  }
+}

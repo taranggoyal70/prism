@@ -1,0 +1,38 @@
+[project]
+name = "prism-pr"
+version = "0.1.0"
+description = "Evidence-backed visual explanations for GitHub pull requests"
+readme = "README.md"
+requires-python = ">=3.11"
+dependencies = [
+  "httpx>=0.28.1",
+  "openai>=1.68.0",
+  "pydantic>=2.10.6",
+  "pydantic-settings>=2.8.1",
+  "python-pptx>=1.0.2",
+  "rich>=13.9.4",
+  "typer>=0.15.2",
+]
+
+[project.scripts]
+prism = "prism.cli:app"
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3.5",
+  "ruff>=0.9.10",
+]
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py311"
+
+[tool.hatch.build.targets.wheel]
+packages = ["prism"]
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
