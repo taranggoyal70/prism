@@ -48,6 +48,12 @@ a {
   color: inherit;
 }
 
+button:focus-visible,
+a:focus-visible {
+  outline: 3px solid var(--signal);
+  outline-offset: 3px;
+}
+
 ::selection {
   background: var(--signal);
   color: var(--void);
